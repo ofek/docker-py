@@ -365,7 +365,7 @@ class DockerApiTest(BaseAPIClientTest):
         assert result == content
 
 
-class StreamTest(unittest.TestCase):
+class UnixSocketStreamTest(unittest.TestCase):
     def setUp(self):
         socket_dir = tempfile.mkdtemp()
         self.build_context = tempfile.mkdtemp()
@@ -462,7 +462,55 @@ class StreamTest(unittest.TestCase):
                         raise e
 
             assert list(stream) == [
-                str(i).encode() for i in range(50)]
+                str(i).encode() for i in range(50)
+            ]
+
+
+class TCPSocketStreamTest(unittest.TestCase):
+    text_data = b'xxx'
+
+    def setUp(self):
+
+        server = six.moves.socketserver.TCPServer(
+            ('', 0), self.get_handler_class()
+        )
+        thread = threading.Thread(target=server.serve_forever)
+        thread.setDaemon(True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.shutdown)
+        self.address = 'http://{}:{}'.format(
+            socket.gethostname(), server.server_address[1]
+        )
+
+    def get_handler_class(self):
+        text_data = self.text_data
+
+        class Handler(six.moves.BaseHTTPServer.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(101)
+                self.send_header('Connection', 'Upgrade')
+                self.send_header('Upgrade', 'tcp')
+                self.end_headers()
+                self.wfile.write(text_data)
+
+        return Handler
+
+    def test_read_from_socket(self):
+        with APIClient(base_url=self.address) as client:
+            # TCP server requires significant setup time, account for flakiness
+            for i in range(3):
+                data = client.exec_start(
+                    fake_api.FAKE_EXEC_ID, stream=True, tty=True
+                )
+                results = b''
+                for x in data:
+                    results += x
+                if len(results) > 0:
+                    break
+                time.sleep(1)
+
+        assert results == self.text_data
 
 
 class UserAgentTest(unittest.TestCase):

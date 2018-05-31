@@ -360,6 +360,7 @@ class APIClient(
 
     def _read_from_socket(self, response, stream, tty=False):
         socket = self._get_raw_response_socket(response)
+        self._disable_socket_timeout(socket)
 
         gen = None
         if tty is False:

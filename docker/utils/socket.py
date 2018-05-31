@@ -1,6 +1,7 @@
 import errno
 import os
 import select
+import socket as pysocket
 import struct
 
 import six
@@ -22,8 +23,12 @@ def read(socket, n=4096):
 
     recoverable_errors = (errno.EINTR, errno.EDEADLK, errno.EWOULDBLOCK)
 
-    if six.PY3 and not isinstance(socket, NpipeSocket):
-        select.select([socket], [], [])
+    if six.PY3:
+        if isinstance(socket, getattr(pysocket, 'SocketIO')):
+            socket = socket._sock
+
+        if not isinstance(socket, NpipeSocket):
+            select.select([socket], [], [])
 
     try:
         if hasattr(socket, 'recv'):
